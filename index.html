@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Garden Defense — 简易塔防（浏览器版）</title>
+  <style>
+    :root{
+      --bg:#d8efe6;
+      --panel:#fff8e6;
+      --accent:#2f9e44;
+      --muted:#475569;
+      --grid-line: rgba(0,0,0,0.06);
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Noto Sans SC",sans-serif;background:linear-gradient(180deg,#d8efe6,#c6e9f0);}
+    .wrap{max-width:1120px;margin:18px auto;padding:16px;display:grid;grid-template-columns:320px 1fr;gap:16px;}
+    .panel{background:var(--panel);border-radius:12px;padding:12px;box-shadow:0 6px 20px rgba(10,20,30,0.08);}
+    .hud{display:flex;flex-direction:column;gap:12px}
+    .title{display:flex;align-items:center;gap:12px}
+    .logo{width:48px;height:48px;border-radius:8px;background:linear-gradient(135deg,#66c2a5,#2f9e44);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:20px}
+    h1{font-size:18px;margin:0}
+    .stat{display:flex;gap:8px;align-items:center}
+    .sun-counter{display:flex;gap:8px;align-items:center;background:linear-gradient(90deg,#ffd86b,#ffb84d);padding:8px;border-radius:10px;color:#3b2b00;font-weight:700}
+    .plant-list{display:flex;flex-direction:column;gap:8px}
+    .plant-card{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;border:1px solid rgba(0,0,0,0.06);cursor:pointer}
+    .plant-card.selected{outline:3px solid rgba(47,158,68,0.15);box-shadow:0 6px 14px rgba(47,158,68,0.06)}
+    .plant-icon{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px}
+    .btn{background:#2f9e44;color:white;border:0;padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:600}
+    .muted{color:var(--muted);font-size:13px}
+    /* Canvas area */
+    .board-wrap{display:flex;flex-direction:column;gap:8px}
+    .topbar{display:flex;justify-content:space-between;align-items:center}
+    .controls{display:flex;gap:8px;align-items:center}
+    canvas{background:
+      linear-gradient(180deg, #c8f0d9 0%, #bce8d2 30%, #b4e1ca 100%);
+      width:100%;height:auto;border-radius:12px;display:block;border:6px solid rgba(255,255,255,0.5);box-shadow:0 10px 30px rgba(20,40,20,0.06);}
+    .help{font-size:13px;color:#334155}
+    .footer{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#334155}
+    .small{font-size:12px;color:#506173}
+    .center{display:flex;align-items:center;gap:8px}
+    @media(max-width:900px){
+      .wrap{grid-template-columns:1fr; padding:12px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <aside class="panel hud" style="min-height:520px">
+      <div class="title">
+        <div class="logo">GD</div>
+        <div>
+          <h1>Garden Defense</h1>
+          <div class="small">原创简易塔防 — 浏览器实现</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+        <div class="stat">
+          <div class="sun-counter" id="sunCounter">☀️ 50</div>
+          <div class="muted">分数: <span id="score">0</span></div>
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="startBtn">开始</button>
+          <button class="btn" id="pauseBtn">暂停</button>
+          <button class="btn" id="resetBtn">重置</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="muted" style="margin-bottom:6px">植物（点击选择，然后在网格放置）：</div>
+        <div class="plant-list" id="plantList">
+          <div class="plant-card selected" data-type="peashooter" tabindex="0" title="豌豆射手 — 花费 100 阳光">
+            <div class="plant-icon" style="background:linear-gradient(180deg,#d9f7e0,#9be7b8)">🌱</div>
+            <div>
+              <div style="font-weight:700">Peashooter</div>
+              <div class="small">花费: 100 · 发射子弹</div>
+            </div>
+          </div>
+
+          <div class="plant-card" data-type="sunflower" tabindex="0" title="向日葵 — 花费 50 阳光">
+            <div class="plant-icon" style="background:linear-gradient(180deg,#fff4b8,#ffd86b)">🌻</div>
+            <div>
+              <div style="font-weight:700">Sunflower</div>
+              <div class="small">花费: 50 · 每隔一段时间生成阳光</div>
+            </div>
+          </div>
+
+          <div class="plant-card" data-type="wallnut" tabindex="0" title="坚果 — 花费 75 阳光">
+            <div class="plant-icon" style="background:linear-gradient(180deg,#f0e0d4,#d9bfa6)">🥜</div>
+            <div>
+              <div style="font-weight:700">Wallnut</div>
+              <div class="small">花费: 75 · 高血量阻挡敌人</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <div class="muted">说明：</div>
+        <ul style="padding-left:18px;margin:8px 0;color:#334155">
+          <li>点击“开始”开始/继续游戏，点击格子放置已选植物（绿色格子内）。</li>
+          <li>僵尸从右侧产生并向左移动，若到达最左侧你将失败。</li>
+          <li>向日葵定期产出太阳（自动获得），豌豆射手会发射子弹攻击僵尸。</li>
+        </ul>
+      </div>
+
+      <div style="margin-top:auto" class="small muted">
+        这是一个简化版。想要更多功能（关卡、卡片冷却器、音效、移动植物、存档等）可以告诉我，我会扩展。
+      </div>
+    </aside>
+
+    <main class="panel board-wrap">
+      <div class="topbar">
+        <div class="help">点击画布放置植物（先在左侧选择）。按 P 暂停/继续。当前难度会随时间增加。</div>
+        <div class="controls center">
+          <div class="muted">波次: <strong id="wave">0</strong></div>
+          <div class="muted">僵尸存活: <strong id="zcount">0</strong></div>
+        </div>
+      </div>
+
+      <canvas id="gameCanvas" width="880" height="520" aria-label="Garden Defense 游戏画布"></canvas>
+
+      <div class="footer">
+        <div class="small">网格：5 行 × 9 列</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // 简化说明：
+    // - 网格：rows x cols
+    // - 植物：peashooter, sunflower, wallnut
+    // - 豌豆射手：射速、发射子弹，子弹与僵尸碰撞造成伤害
+    // - 向日葵：周期性产生阳光（增加资源）
+    // - 僵尸：定期从右侧某行生成，向左移动；碰到植物则攻击植物
+    // - 游戏结束：僵尸 x <= 0 则失败（到达最左侧）
+    // 这是一个学习/示范级实现，不包含音效或复杂 UI。
+
+    (function(){
+      // Canvas / 网格设置
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      let cw = canvas.width, ch = canvas.height;
+
+      const rows = 5, cols = 9;
+      const padding = 10;
+      // 画布内用于网格的区域
+      const gridX = padding, gridY = padding;
+      const gridW = cw - padding*2, gridH = ch - padding*2;
+      const cellW = Math.floor(gridW / cols);
+      const cellH = Math.floor(gridH / rows);
+
+      // Game state
+      let running = false;
+      let lastTime = 0;
+      let accumulator = 0;
+      let sun = 50;
+      let score = 0;
+      let wave = 0;
+      let zombiesAlive = 0;
+      let difficulty = 1; // 难度随时间提升
+
+      // DOM
+      const sunCounter = document.getElementById('sunCounter');
+      const scoreEl = document.getElementById('score');
+      const startBtn = document.getElementById('startBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      const resetBtn = document.getElementById('resetBtn');
+      const plantList = document.getElementById('plantList');
+      const waveEl = document.getElementById('wave');
+      const zcountEl = document.getElementById('zcount');
+
+      // Selected plant type
+      let selectedPlantType = 'peashooter';
+      // Grid of plants: null or plant object
+      const grid = Array.from({length: rows}, () => Array(cols).fill(null));
+
+      // Entities
+      const bullets = [];
+      const zombies = [];
+
+      // Timers and spawn config
+      let spawnTimer = 0;
+      let spawnInterval = 3500; // ms
+      let sunAutoTimer = 0;
+      const sunAutoInterval = 10000; // 初始向日葵生成间隔
+
+      // Plant stats
+      const plantDefs = {
+        peashooter: { cost:100, hp:60, type:'shooter', shootInterval:900, color:'#7fd3a6' },
+        sunflower:  { cost:50, hp:50, type:'sun', produceInterval:1800, color:'#ffde6b' },
+        wallnut:    { cost:75, hp:220, type:'block', color:'#e0c2a4' }
+      };
+
+      // Zombie types
+      // NOTE: speeds reduced compared to original to slow down zombies significantly.
+      const zombieDefs = [
+        { name:'Walker', hp:100, speed:0.0008, color:'#7b6b5a', reward:25 },
+        { name:'Brute',  hp:180, speed:0.0009, color:'#5f4f46', reward:50 },
+      ];
+
+      // Utility
+      function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+      function randInt(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+
+      // Plant placement via mouse
+      canvas.addEventListener('click', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+        const col = Math.floor((x - gridX) / cellW);
+        const row = Math.floor((y - gridY) / cellH);
+        if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+        placePlant(row, col, selectedPlantType);
+      });
+
+      // Select plant UI
+      plantList.addEventListener('click', (e) => {
+        const card = e.target.closest('.plant-card');
+        if (!card) return;
+        const type = card.dataset.type;
+        selectPlantType(type);
+      });
+      function selectPlantType(type){
+        selectedPlantType = type;
+        Array.from(plantList.querySelectorAll('.plant-card')).forEach(c=>{
+          c.classList.toggle('selected', c.dataset.type === type);
+        });
+      }
+
+      // Buttons
+      startBtn.addEventListener('click', ()=> { if (!running) startGame(); });
+      pauseBtn.addEventListener('click', ()=> { togglePause(); });
+      resetBtn.addEventListener('click', ()=> { resetGame(); });
+
+      // Keyboard
+      document.addEventListener('keydown', (e)=>{
+        if (e.key === 'p' || e.key === 'P') togglePause();
+      });
+
+      function togglePause(){
+        running = !running;
+        if (running){
+          lastTime = performance.now();
+          requestAnimationFrame(loop);
+        }
+      }
+
+      // Place plant if possible
+      function placePlant(r,c,type){
+        if (grid[r][c]) return; // 已有植物
+        const def = plantDefs[type];
+        if (!def) return;
+        if (sun < def.cost) {
+          flashSun();
+          return;
+        }
+        sun -= def.cost;
+        updateUI();
+        const plant = {
+          type,
+          hp: def.hp,
+          def,
+          row: r,
+          col: c,
+          x: gridX + c*cellW + cellW/2,
+          y: gridY + r*cellH + cellH/2,
+          shootTimer: 0,
+          produceTimer: 0,
+        };
+        grid[r][c] = plant;
+      }
+
+      function flashSun(){
+        // 快速提示：闪烁 sunCounter 背景
+        sunCounter.style.transition = 'none';
+        sunCounter.style.transform = 'scale(1.06)';
+        setTimeout(()=> { sunCounter.style.transition = 'transform .3s'; sunCounter.style.transform = 'scale(1)'; }, 50);
+      }
+
+      // Spawn a zombie in a random row
+      function spawnZombie(){
+        wave++;
+        waveEl.textContent = wave;
+        const row = randInt(0, rows-1);
+        // Choose type based on difficulty / wave
+        const def = (Math.random() < Math.min(0.15 + wave*0.01, 0.4)) ? zombieDefs[1] : zombieDefs[0];
+        const z = {
+          def,
+          hp: def.hp,
+          x: gridX + cols*cellW + 30, // start slightly off-canvas right
+          y: gridY + row*cellH + cellH/2,
+          row,
+          // use a smaller difficulty multiplier so speed growth is gentler
+          speed: def.speed * (1 + difficulty*0.04),
+          targetPlant: null,
+          attackTimer: 0,
+          width: cellW*0.8,
+          height: cellH*0.8,
+        };
+        zombies.push(z);
+        zombiesAlive = zombies.length;
+        updateUI();
+      }
+
+      // Game loops
+      function startGame(){
+        if (!running) {
+          running = true;
+          lastTime = performance.now();
+          requestAnimationFrame(loop);
+        }
+      }
+      function resetGame(){
+        running = false;
+        // reset state
+        sun = 50;
+        score = 0;
+        wave = 0;
+        difficulty = 1;
+        bullets.length = 0;
+        zombies.length = 0;
+        for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) grid[r][c] = null;
+        spawnTimer = 0;
+        sunAutoTimer = 0;
+        updateUI();
+        draw(); // draw initial
+      }
+
+      function gameOver(reason){
+        running = false;
+        draw();
+        // 显示提示
+        setTimeout(()=> {
+          const again = confirm(reason + "\\n要重新开始吗？");
+          if (again) resetGame(), startGame();
+        }, 50);
+      }
+
+      // Update UI DOM
+      function updateUI(){
+        sunCounter.textContent = '☀️ ' + sun;
+        scoreEl.textContent = score;
+        zcountEl.textContent = zombies.length;
+      }
+
+      // Projectile creation
+      function shoot(fromPlant){
+        const b = {
+          x: gridX + fromPlant.col*cellW + cellW * 0.65,
+          y: gridY + fromPlant.row*cellH + cellH/2,
+          vx: 0.6 + difficulty*0.05, // pixels per ms
+          dmg: 30,
+          radius: 6,
+          owner: fromPlant
+        };
+        bullets.push(b);
+      }
+
+      // Main loop using rAF
+      function loop(t){
+        if (!running) return;
+        const dt = Math.min(50, t - lastTime); // cap dt
+        lastTime = t;
+        tick(dt);
+        draw();
+        requestAnimationFrame(loop);
+      }
+
+      function tick(dt){
+        // Timers
+        spawnTimer += dt;
+        sunAutoTimer += dt;
+        accumulator += dt;
+
+        // difficulty increases gradually (reduced rate)
+        difficulty += dt * 0.00001;
+
+        // spawn interval shortens with difficulty
+        spawnInterval = 3200 - Math.min(2000, difficulty * 350);
+
+        // spawn zombie occasionally
+        if (spawnTimer >= spawnInterval){
+          spawnTimer = 0;
+          spawnZombie();
+        }
+
+        // Update plants
+        for (let r=0;r<rows;r++){
+          for (let c=0;c<cols;c++){
+            const p = grid[r][c];
+            if (!p) continue;
+            if (p.type === 'peashooter'){
+              p.shootTimer += dt;
+              if (p.shootTimer >= p.def.shootInterval){
+                p.shootTimer = 0;
+                shoot(p);
+              }
+            } else if (p.type === 'sunflower'){
+              p.produceTimer += dt;
+              if (p.produceTimer >= p.def.produceInterval){
+                p.produceTimer = 0;
+                // each sunflower produces some sun
+                const gain = 25;
+                sun += gain;
+                score += 5;
+                // small chance drop sun? (omitted)
+                updateUI();
+              }
+            }
+          }
+        }
+
+        // Update bullets
+        for (let i = bullets.length - 1; i >= 0; i--){
+          const b = bullets[i];
+          b.x += b.vx * dt;
+          // check collision with zombies in same row
+          for (let j=0;j<zombies.length;j++){
+            const z = zombies[j];
+            // only consider collisions on same row (approx)
+            if (Math.abs(z.y - b.y) < cellH*0.45){
+              // bounding box collision
+              if (b.x + b.radius >= z.x - z.width/2){
+                // hit
+                z.hp -= b.dmg;
+                bullets.splice(i,1);
+                if (z.hp <= 0){
+                  // kill
+                  score += z.def.reward;
+                  // small chance drop sun? (omitted)
+                  zombies.splice(j,1);
+                }
+                break;
+              }
+            }
+          }
+          // remove off-screen
+          if (i < bullets.length && b && b.x > gridX + cols*cellW + 200){
+            bullets.splice(i,1);
+          }
+        }
+
+        // Update zombies
+        for (let i = zombies.length - 1; i >= 0; i--){
+          const z = zombies[i];
+          // if there's a plant in front of it in same row and column area, then attack plant
+          // compute its column position
+          const relativeX = z.x - gridX;
+          let col = Math.floor(relativeX / cellW);
+          col = clamp(col, -1, cols-1);
+
+          // find plant in front: column at or to the left of current x
+          let targetPlant = null;
+          for (let c = col; c >= 0; c--){
+            const p = grid[z.row][c];
+            if (p){
+              // if plant is close enough horizontally
+              const plantX = gridX + c*cellW + cellW/2;
+              if (z.x - plantX <= cellW*0.9){
+                targetPlant = p;
+                break;
+              }
+            }
+          }
+
+          if (targetPlant){
+            // attack plant: do not move, reduce plant HP over time
+            z.attackTimer += dt;
+            if (z.attackTimer >= 500){ // attack every 500ms
+              z.attackTimer = 0;
+              targetPlant.hp -= 18;
+              if (targetPlant.hp <= 0){
+                // plant dies
+                grid[targetPlant.row][targetPlant.col] = null;
+              }
+            }
+          } else {
+            // move forward
+            // movement multiplier reduced from 100 -> 40 to slow down movement
+            z.x -= z.speed * dt * 40;
+          }
+
+          // check reach left edge (failure)
+          if (z.x - z.width/2 <= gridX){
+            // game over
+            gameOver('你的家被僵尸攻破了！');
+            return;
+          }
+        }
+
+        // occasionally add idle small suns (passive) to encourage play if no sunflowers placed
+        // update zombiesAlive
+        zombiesAlive = zombies.length;
+        updateUI();
+      }
+
+      // Drawing
+      function draw(){
+        // clear
+        ctx.fillStyle = '#bdeed8';
+        ctx.fillRect(0,0,cw,ch);
+
+        // draw grid background with slight rows
+        for (let r=0;r<rows;r++){
+          const gy = gridY + r*cellH;
+          ctx.fillStyle = (r % 2 === 0) ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)';
+          ctx.fillRect(gridX, gy, cols*cellW, cellH);
+        }
+
+        // grid lines
+        ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+        ctx.lineWidth = 1;
+        for (let c=0;c<=cols;c++){
+          ctx.beginPath();
+          ctx.moveTo(gridX + c*cellW, gridY);
+          ctx.lineTo(gridX + c*cellW, gridY + rows*cellH);
+          ctx.stroke();
+        }
+        for (let r=0;r<=rows;r++){
+          ctx.beginPath();
+          ctx.moveTo(gridX, gridY + r*cellH);
+          ctx.lineTo(gridX + cols*cellW, gridY + r*cellH);
+          ctx.stroke();
+        }
+
+        // draw plants
+        for (let r=0;r<rows;r++){
+          for (let c=0;c<cols;c++){
+            const p = grid[r][c];
+            const px = gridX + c*cellW + cellW/2;
+            const py = gridY + r*cellH + cellH/2;
+            if (p){
+              // plant base
+              ctx.beginPath();
+              ctx.fillStyle = p.def.color;
+              const w = cellW * 0.7;
+              const h = cellH * 0.6;
+              roundRect(ctx, px - w/2, py - h/2, w, h, 10);
+              ctx.fill();
+
+              // draw an icon and hp bar
+              ctx.font = '20px serif';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              let icon = '🌱';
+              if (p.type === 'sunflower') icon = '🌻';
+              if (p.type === 'wallnut') icon = '🥜';
+              ctx.fillText(icon, px, py - 2);
+
+              // hp bar
+              const hpRatio = clamp(p.hp / p.def.hp, 0, 1);
+              ctx.fillStyle = 'rgba(0,0,0,0.12)';
+              ctx.fillRect(px - w/2, py + h/2 + 6, w, 6);
+              ctx.fillStyle = hpRatio > 0.6 ? '#2f9e44' : (hpRatio > 0.3 ? '#ffb84d' : '#ff6b6b');
+              ctx.fillRect(px - w/2 + 1, py + h/2 + 7, (w-2) * hpRatio, 4);
+            }
+          }
+        }
+
+        // draw bullets
+        for (const b of bullets){
+          ctx.beginPath();
+          ctx.fillStyle = '#2b9fff';
+          ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
+          ctx.fill();
+          // small tail
+          ctx.fillStyle = 'rgba(43,159,255,0.25)';
+          ctx.fillRect(b.x - b.radius - 3, b.y - 2, 4, 4);
+        }
+
+        // draw zombies
+        for (const z of zombies){
+          const zx = z.x;
+          const zy = z.y;
+          const w = z.width;
+          const h = z.height;
+          // body
+          ctx.beginPath();
+          ctx.fillStyle = z.def.color;
+          roundRect(ctx, zx - w/2, zy - h/2, w, h, 10);
+          ctx.fill();
+          // face (eyes/mouth)
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(zx - w*0.18, zy - h*0.23, 6, 6);
+          ctx.fillRect(zx + w*0.03, zy - h*0.23, 6, 6);
+          ctx.fillStyle = '#3b2b2b';
+          ctx.fillRect(zx - w*0.14, zy - h*0.08, 20, 6);
+
+          // hp bar above
+          const hpRatio = clamp(z.hp / z.def.hp, 0, 1);
+          ctx.fillStyle = 'rgba(0,0,0,0.12)';
+          ctx.fillRect(zx - w/2, zy - h/2 - 10, w, 6);
+          ctx.fillStyle = hpRatio > 0.6 ? '#2f9e44' : (hpRatio > 0.3 ? '#ffb84d' : '#ff6b6b');
+          ctx.fillRect(zx - w/2 + 1, zy - h/2 - 9, Math.max(0, (w-2) * hpRatio), 4);
+        }
+
+        // HUD overlay: show selected plant icon on top-left
+        ctx.font = '14px sans-serif';
+        ctx.fillStyle = '#0f172a';
+        ctx.textAlign = 'left';
+        ctx.fillText('已选: ' + selectedPlantType, gridX, gridY - 6);
+      }
+
+      // helper rounded rect
+      function roundRect(ctx,x,y,w,h,r){
+        ctx.beginPath();
+        ctx.moveTo(x+r,y);
+        ctx.arcTo(x+w,y,x+w,y+h,r);
+        ctx.arcTo(x+w,y+h,x,y+h,r);
+        ctx.arcTo(x,y+h,x,y,r);
+        ctx.arcTo(x,y,x+w,y,r);
+        ctx.closePath();
+      }
+
+      // Initial draw
+      resetGame();
+
+      // Add periodic sun drop (ambient) to keep gameplay moving if no sunflowers placed
+      setInterval(()=>{
+        // small chance to create ambient sun
+        if (!running) return;
+        const chance = 0.25;
+        if (Math.random() < chance){
+          sun += 15;
+          score += 1;
+          updateUI();
+        }
+      }, 9000);
+
+      // Recompute canvas size on resize for crispness
+      function recomputeCanvas(){
+        // keep internal resolution constant for simplicity; could be scaled for HiDPI
+        // If want responsive, could adjust cw/ch based on container
+      }
+      window.addEventListener('resize', recomputeCanvas);
+      // start game automatically
+      startGame();
+
+      // Expose some debug on window for tinkering
+      window._gd = { grid, zombies, bullets, placePlant, resetGame };
+    })();
+  </script>
+</body>
+</html>
